@@ -4,15 +4,15 @@
 #  Pipeline for the samtools workflow for calling variants.
 #
 #
-#  Run within root level of samples analysis dir
-#  No multi mode yet
+#  Run within root level of samples analysis dir.
+#  No multi mode yet.
 #
 
 
 
 ##################################################################
-#   SOFTWARES
-# Provide locations of the softwares to be used. 
+#  SOFTWARES
+#  Provide locations of the softwares to be used. 
 
 PICARD="java -jar /usr/local/src/picard-tools-1.119"
 SAMTOOLS="samtools"
@@ -21,7 +21,7 @@ GATK="java -jar /usr/local/src/gatk/GenomeAnalysisTK.jar"
 
 #################################################################
 #   FILES 
-# Aligned bam file, reference FASTA file and VCF file of known variants. 
+# Aligned bam file and reference fasta file
 
 mode=$1
 reference=$2
@@ -153,7 +153,7 @@ then
 
 
 	#############################################################
-	## GATK Data Pre-Processing
+	# GATK Data Pre-Processing
 
 	# Step 1 - Local realignment around indels.
 	# Create a target list of intervals to be realigned.
@@ -225,7 +225,7 @@ then
 	bcftools filter -O z -o "${bam%.bam}_realigned_reads.filtered.vcf.gz" -s LOWQUAL -i'%QUAL>30 && DP>5' "${bam%.bam}_realigned_reads.vcf.gz"
 
 	# Create mask fasta file based on bed coverage cutoff X reads.
-    echo "Masking reference fasta file with low cov across sequenced genome (<=5 read depths).."
+   	echo "Masking reference fasta file with low cov across sequenced genome (<=5 read depths).."
 	
 	awk '($3<=5) {print $1"\t"$2"\t"$2}' "${bam}.bed_coverage" > "${bam}.lowcov.bed"
 	bedtools maskfasta -fi $reference -bed "${bam}.lowcov.bed" -fo $sampleDir/"${reference%.fasta}.masked.fasta"
@@ -243,7 +243,7 @@ then
 	echo "Generating VP1 region only consensus..."
 	samtools faidx "$sampleDir/${reference%.fasta}.masked.fasta" gi\|9627180\|ref\|NC_001538.1\|:1564-2652 | bcftools consensus "${bam%.bam}_realigned_reads.filtered_passed.bcf" > "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta"
 	
-	# Rename fasta header to sample name, output to temp file
+	# Rename fasta header to sample names
 	echo "Renaming genotype consensus fasta headers using $readGroupSMTag prefix of the bam file..."
 
 	sed "s/>.*/>$readGroupSMTag complete/" "${bam%.bam}_realigned_reads.filtered_passed.fasta" > "${bam%.bam}_realigned_reads.filtered_passed.fasta.tmp"
@@ -255,5 +255,5 @@ then
 	echo "File complete..."
 fi
 
-echo "Done..."
+printf "Finished..."
 
