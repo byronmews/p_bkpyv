@@ -123,14 +123,14 @@ then
 
 	$PICARD/QualityScoreDistribution.jar \
 	INPUT=$bam \
-	CHART_OUTPUT="$sampleDir/$readGroupSMTag_mean_quality_overall.pdf" \
-	OUTPUT="$sampleDir/$readGroupSMTag_read_quality_overall.txt" \
-	reference_SEQUENCE=$reference
+	CHART_OUTPUT=$sampleDir/$readGroupSMTag_mean_quality_overall.pdf \
+	OUTPUT=$sampleDir/$readGroupSMTag_read_quality_overall.txt \
+	REFERENCE_SEQUENCE=$reference
 
 
 	$PICARD/CollectWgsMetrics.jar \
-	INPUT=$bam OUTPUT="$sampleDir/$readGroupSMTag_stats_picard.txt" \
-	reference_SEQUENCE=$reference \
+	INPUT=$bam OUTPUT=$sampleDir/$readGroupSMTag_stats_picard.txt \
+	REFERENCE_SEQUENCE=$reference \
 	MINIMUM_MAPPING_QUALITY=20 \
 	MINIMUM_BASE_QUALITY=20
 
