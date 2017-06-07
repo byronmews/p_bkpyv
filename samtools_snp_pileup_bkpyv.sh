@@ -53,19 +53,16 @@ then
 	grep '^@SQ' $head_file > $sampleDir/$readGroupSMTag"_beta.txt"
 	file=$readGroupSMTag"_beta.txt"
 
-	echo "Created $file"
+	echo "Created $file..."
 
-	#less $file
-	# check if the file is sorted.
+	# Check if the file is sorted.
 	T="sort -c -t':' -nk2 $file"
 	if [ "$T" ]; then
-    	echo "The file is sorted!"
-
+    		echo "The file is sorted!"
 	else
-    	echo "The file is not sorted."
-    	echo "Sorting........."
-    	$PICARD/SortSam.jar INPUT=$bam OUTPUT="${bam%.bam}.sorted.bam" SORT_ORDER=coordinate
-
+    		echo "The file is not sorted..."
+    		echo "Sorting......"
+    		$PICARD/SortSam.jar INPUT=$bam OUTPUT="${bam%.bam}.sorted.bam" SORT_ORDER=coordinate
 	fi
 
 
@@ -93,7 +90,7 @@ then
 	echo "Prepping reference geonome fasta file for GATK....."
 	
 	# Create sequence dictionary using Picard Tools.
-	# the following command produces a SAM-style header file describing the contents of our fasta file.
+	# The following produces a SAM-style header file describing the contents of the fasta file.
 	$PICARD/CreateSequenceDictionary.jar \
 	reference=$reference \
 	OUTPUT=$reference".dict"
@@ -215,43 +212,56 @@ then
 
 	/usr/local/bin/tabix -p vcf "${bam%.bam}_realigned_reads.vcf.gz"
 	
-	echo "Plotting snps..."
+	echo "Getting snp stats..."
 
 	bcftools stats -F $reference -s - "${bam%.bam}_realigned_reads.vcf.gz" > "${bam%.bam}_realigned_reads.vcf.gz.stats"
+	
+	# If no SNPs
 
 	# Filtering VCF
-	echo "Generating soft filter VCF..."
+	echo "Filtering VCF file..."
 
 	bcftools filter -O z -o "${bam%.bam}_realigned_reads.filtered.vcf.gz" -s LOWQUAL -i'%QUAL>30 && DP>5' "${bam%.bam}_realigned_reads.vcf.gz"
 
-	# Create mask fasta file based on bed coverage cutoff X reads.
+	bcftools view -Ov -f .,PASS "${bam%.bam}_realigned_reads.filtered.vcf.gz" > "${bam%.bam}_realigned_reads.filtered_passed.vcf"
+	cat "${bam%.bam}_realigned_reads.filtered_passed.vcf" | bcftools convert -O b -o "${bam%.bam}_realigned_reads.filtered_passed.bcf"
+	
+	bcftools index "${bam%.bam}_realigned_reads.filtered_passed.bcf"
+
+
+	# Create mask fasta based on bed coverage cutoff of <=5 reads
    	echo "Masking reference fasta file with low cov across sequenced genome (<=5 read depths).."
 	
 	awk '($3<=5) {print $1"\t"$2"\t"$2}' "${bam}.bed_coverage" > "${bam}.lowcov.bed"
 	bedtools maskfasta -fi $reference -bed "${bam}.lowcov.bed" -fo $sampleDir/"${reference%.fasta}.masked.fasta"
 	
-	# Convert to fasta file with gentypes inserted, needing bcf files of the filtered vcr
-	echo "Generate fasta with filtered genotype positions inserted..."
 
-	bcftools view -Ov -f .,PASS "${bam%.bam}_realigned_reads.filtered.vcf.gz" > "${bam%.bam}_realigned_reads.filtered_passed.vcf"
-	cat "${bam%.bam}_realigned_reads.filtered_passed.vcf" | bcftools convert -O b -o "${bam%.bam}_realigned_reads.filtered_passed.bcf"
-
-	bcftools index "${bam%.bam}_realigned_reads.filtered_passed.bcf"
-
-	cat "$sampleDir/${reference%.fasta}.masked.fasta" | bcftools consensus "${bam%.bam}_realigned_reads.filtered_passed.bcf" > "${bam%.bam}_realigned_reads.filtered_passed.fasta"
-
-	echo "Generating VP1 region only consensus..."
-	samtools faidx "$sampleDir/${reference%.fasta}.masked.fasta" gi\|9627180\|ref\|NC_001538.1\|:1564-2652 | bcftools consensus "${bam%.bam}_realigned_reads.filtered_passed.bcf" > "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta"
+	# If no filtered SNPs left within vcf, skip cns calling
+	if grep -q "^gi|9627180|ref|NC_001538.1|" "${bam%.bam}_realigned_reads.filtered_passed.vcf"; then
 	
-	# Rename fasta header to sample names
-	echo "Renaming genotype consensus fasta headers using $readGroupSMTag prefix of the bam file..."
+		# Convert to fasta file with genotypes inserted, needing bcf files of the filtered vcr
 
-	sed "s/>.*/>$readGroupSMTag complete/" "${bam%.bam}_realigned_reads.filtered_passed.fasta" > "${bam%.bam}_realigned_reads.filtered_passed.fasta.tmp"
- 	sed "s/>.*/>$readGroupSMTag VP1/" "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta" > "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta.tmp"
+		echo "Filtered SNPs present in ${bam%.bam}_realigned_reads.filtered_passed.vcf"
+		echo "Building fasta with filtered genotype positions inserted..."
 
-	mv "${bam%.bam}_realigned_reads.filtered_passed.fasta.tmp" "${bam%.bam}_realigned_reads.filtered_passed.fasta"
-	mv "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta.tmp" "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta"
+		cat "$sampleDir/${reference%.fasta}.masked.fasta" | bcftools consensus "${bam%.bam}_realigned_reads.filtered_passed.bcf" > "${bam%.bam}_realigned_reads.filtered_passed.fasta"
 
+		echo "Generating VP1 region only consensus..."
+		samtools faidx "$sampleDir/${reference%.fasta}.masked.fasta" gi\|9627180\|ref\|NC_001538.1\|:1564-2652 | bcftools consensus "${bam%.bam}_realigned_reads.filtered_passed.bcf" > "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta"
+	
+		# Rename fasta header to sample names, and tidy up
+		echo "Renaming genotype consensus fasta headers using $readGroupSMTag prefix of the bam file..."
+
+		sed "s/>.*/>$readGroupSMTag complete/" "${bam%.bam}_realigned_reads.filtered_passed.fasta" > "${bam%.bam}_realigned_reads.filtered_passed.fasta.tmp"
+ 		sed "s/>.*/>$readGroupSMTag VP1/" "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta" > "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta.tmp"
+
+		mv "${bam%.bam}_realigned_reads.filtered_passed.fasta.tmp" "${bam%.bam}_realigned_reads.filtered_passed.fasta"
+		mv "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta.tmp" "${bam%.bam}_realigned_reads.filtered_passed.VP1.fasta"
+	else
+		echo "No filtered SNPs present in ${bam%.bam}_realigned_reads.filtered_passed.vcf, exiting..."
+
+	fi
+	
 	echo "File complete..."
 fi
 
